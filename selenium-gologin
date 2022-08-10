@@ -1,0 +1,268 @@
+public class SeChrome
+    {
+        Random rnd = new Random();
+        GoLoginOffline go = new GoLoginOffline();
+        private bool keepUserDataDir;
+        private string userDataDir;
+
+        public ChromeDriver Create(
+            string browserExecutablePath = null,
+            string userDataDir = null,
+            ChromeOptions options = null,
+            string driverExecutablePath = null,
+            bool headless = false,
+            bool hideCommandPromptWindow = false)
+        {
+            try
+            {
+                if (string.IsNullOrEmpty(browserExecutablePath))
+                {
+                    browserExecutablePath = AppDomain.CurrentDomain.BaseDirectory + @"browser\browser\chrome.exe";
+                }
+                //----- Patcher ChromeDriver -----
+                if (string.IsNullOrEmpty(driverExecutablePath))
+                {
+                    driverExecutablePath = AppDomain.CurrentDomain.BaseDirectory + "chromedriver.exe";
+                }
+                Patcher patcher = new Patcher(driverExecutablePath);
+                patcher.Auto();
+                //----- Patcher ChromeDriver -----
+
+                //----- Options -----
+                if (options == null) options = new ChromeOptions();
+                options.AddArgument($"--disable-encryption");
+                options.AddArgument($"--font-masking-mode=2");
+                options.AddArgument($"--lang=en-US");
+                options.AddArgument($"--host-resolver-rules=\"EXCLUDE tmproxy.com\"");
+                string extensionDir = AppDomain.CurrentDomain.BaseDirectory + @"browser\extensions\";
+                options.AddArgument($"--load-extension=\"" + extensionDir + "cookies-ext," + extensionDir + "passwords-ext," + extensionDir + "tm-proxy\"");
+                //----- Options -----
+
+                //----- DebugPort -----
+                Contact for source code
+                //----- DebugPort -----
+
+                //----- UserDataDir -----
+                this.keepUserDataDir = true;
+                var userDataDirArg = options.Arguments
+                    .Select(it => Regex.Match(it,
+                        @"(?:--)?user-data-dir(?:[ =])?(.*)"))
+                    .Select(it => it.Groups[1].Value)
+                    .FirstOrDefault(it => !string.IsNullOrEmpty(it));
+                if (userDataDirArg != null)
+                    userDataDir = userDataDirArg;
+                else
+                {
+                    if (userDataDir == null)
+                    {
+                        this.keepUserDataDir = false;
+                        userDataDir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString());
+                        go.CreateProfileFromLocal(userDataDir, "Guest-" + rnd.Next(1000, 10000));
+                    }
+                    options.AddArgument($"--user-data-dir={userDataDir}");
+                }
+                this.userDataDir = userDataDir;
+                //----- UserDataDir -----
+
+
+                //----- BinaryLocation -----
+                options.BinaryLocation = browserExecutablePath;
+                //----- BinaryLocation -----
+
+                //----- Headless -----
+                if (headless)
+                {
+                    options.AddArguments("--headless");
+                    options.AddArguments("--window-size=1920,1080");
+                    options.AddArguments("--start-maximized");
+                    options.AddArguments("--no-sandbox");
+                }
+                //----- Headless -----
+
+                //----- Fix exit_type -----
+                try
+                {
+                    var filePath = Path.Combine(userDataDir, @"Default/Preferences");
+                    var json = File.ReadAllText(filePath,
+                        Encoding.GetEncoding("ISO-8859-1"));
+                    var regex = new Regex(@"(?<=exit_type"":)(.*?)(?=,)");
+                    var exitType = regex.Match(json).Value;
+                    if (exitType != "" && exitType != "null")
+                    {
+                        json = regex.Replace(json, "null");
+                        File.WriteAllText(filePath, json,
+                            Encoding.GetEncoding("ISO-8859-1"));
+                    }
+                }
+                catch (Exception) { }
+                //----- Fix exit_type -----
+
+                //----- Start Process -----
+                var args = options.Arguments
+                    .Select(it => it.Trim())
+                    .Aggregate("", (r, it) => r + " " +
+                        (it.Contains(" ") ? $"\"{it}\"" : it));
+                var info = new ProcessStartInfo(options.BinaryLocation, args);
+                info.UseShellExecute = false;
+                info.RedirectStandardInput = true;
+                info.RedirectStandardOutput = true;
+                info.RedirectStandardError = true;
+                var browser = Process.Start(info);
+                browser.EnableRaisingEvents = true;
+                browser.Exited += ProcessEnded;
+                //----- Start Process -----
+
+                //----- Create ChromeDriver -----
+                var service = ChromeDriverService.CreateDefaultService(
+                    Path.GetDirectoryName(driverExecutablePath),
+                    Path.GetFileName(driverExecutablePath));
+                service.HideCommandPromptWindow = hideCommandPromptWindow;
+                ChromeDriver driver = new ChromeDriver(service, options);
+                //----- Create ChromeDriver -----
+
+
+                if (hasCdcProps(driver))
+                    hookRemoveCdcProps(driver);
+
+                return driver;
+            }
+            catch (Exception err)
+            {
+                File.WriteAllText(AppDomain.CurrentDomain.BaseDirectory + "logs.txt", err.ToString());
+                return null;
+            }
+        }
+
+        private void ProcessEnded(object sender, EventArgs e)
+        {
+            if (!this.keepUserDataDir)
+            {
+                for (var i = 0; i < 5; i++)
+                {
+                    try
+                    {
+                        Directory.Delete(this.userDataDir, true);
+                        break;
+                    }
+                    catch (Exception)
+                    {
+                        Thread.Sleep(100);
+                    }
+                }
+            }
+        }
+
+        private bool hasCdcProps(ChromeDriver driver)
+        {
+            var props = (ReadOnlyCollection<object>)driver.ExecuteScript(
+                @"
+                    let objectToInspect = window,
+                        result = [];
+                    while(objectToInspect !== null)
+                    { result = result.concat(Object.getOwnPropertyNames(objectToInspect));
+                      objectToInspect = Object.getPrototypeOf(objectToInspect); }
+                    return result.filter(i => i.match(/.+_.+_(Array|Promise|Symbol)/ig))
+                 ");
+            return props.Count > 0;
+        }
+
+        private void hookRemoveCdcProps(ChromeDriver driver)
+        {
+            driver.ExecuteCdpCommand(
+                "Page.addScriptToEvaluateOnNewDocument",
+                new Dictionary<string, object>
+                {
+                    ["source"] =
+                    @"
+                        let objectToInspect = window,
+                            result = [];
+                        while(objectToInspect !== null) 
+                        { result = result.concat(Object.getOwnPropertyNames(objectToInspect));
+                          objectToInspect = Object.getPrototypeOf(objectToInspect); }
+                        result.forEach(p => p.match(/.+_.+_(Array|Promise|Symbol)/ig)
+                                            &&delete window[p]&&console.log('removed',p))
+                     "
+                });
+        }
+
+       // socket EndPoint
+       Contact for source code
+       // socket EndPoint
+
+        public bool WaitLoadWeb(ChromeDriver driver, By by, int timeout = 60)
+        {
+            try
+            {
+                for (int i = 0; i < timeout; i++)
+                {
+                    Thread.Sleep(1000);
+                    if (IsElement(driver, by))
+                    {
+                        Thread.Sleep(200);
+                        return true;
+                    }
+                }
+                return false;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        public bool IsElement(ChromeDriver driver, By by)
+        {
+            try
+            {
+                driver.FindElement(by);
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+        
+
+    }
+
+    public class Patcher
+    {
+        private string _driverExecutablePath;
+        public Patcher(
+            string driverExecutablePath = null)
+        {
+            _driverExecutablePath = driverExecutablePath;
+        }
+
+        public void Auto()
+        {
+            if (!isBinaryPatched())
+                patchExe();
+        }
+
+        private bool isBinaryPatched()
+        {
+            if (_driverExecutablePath == null)
+                throw new Exception("driverExecutablePath is required.");
+
+            using (var fs = new FileStream(_driverExecutablePath,
+                FileMode.Open, FileAccess.Read))
+            using (var reader = new StreamReader(fs, Encoding.GetEncoding("ISO-8859-1")))
+            {
+                while (true)
+                {
+                    var line = reader.ReadLine();
+                    if (line == null)
+                        break;
+                    if (line.Contains("cdc_"))
+                        return false;
+                }
+                return true;
+            }
+        }
+
+       // Bypass Selenium
+       Contact for source code
+       // Bypass Selenium
+    }
