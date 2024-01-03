@@ -1,10 +1,10 @@
 using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.IO;
 using System.Net.Http;
-using System.Net.Http.Headers;
+using System.Net.Sockets;
 using System.Threading.Tasks;
+using Newtonsoft.Json;
 using OpenQA.Selenium;
 using OpenQA.Selenium.Chrome;
 using OpenQA.Selenium.Support.UI;
@@ -15,7 +15,7 @@ namespace CSharpWebDriverExample
     {
         static async Task Main(string[] args)
         {
-            string tmpdir = Path.GetTempPath();
+            string tmpdir = Path.GetTempPath(); // Đổi thư mục lưu trữ profile nếu cần
             string address = "127.0.0.1";
             List<string> extraParams = new List<string>
             {
@@ -26,8 +26,8 @@ namespace CSharpWebDriverExample
 
             Product starts = new Product(tmpdir, address, extraParams, local, credentialsEnableService);
             string proxyData = null;
-            List<string> proxyDataList = new List<string> { "http://192.168.1.111:7101", "http://192.168.1.111:7102" };
-            // List<string> proxyDataList = new List<string>(); // Uncomment this line if you don't have proxy data
+            List<string> proxyDataList = new List<string> { "http://192.168.1.111:7101", "http://192.168.1.111:7102" }; // Đổi proxy tại đây
+            // List<string> proxyDataList = new List<string>(); // Bỏ comment dòng này nếu không có dữ liệu proxy
 
             if (proxyDataList.Count > 0)
             {
@@ -37,7 +37,7 @@ namespace CSharpWebDriverExample
                 }
             }
 
-            string profileId = "98998097614797189124";
+            string profileId = "98998097614797189124"; // Đổi tên profile ở đây
             starts.SetProfileId(profileId);
 
             if (!string.IsNullOrEmpty(proxyData))
@@ -111,6 +111,7 @@ namespace CSharpWebDriverExample
         public bool Local { get; private set; }
         public bool CredentialsEnableService { get; private set; }
         public string ProfilePath { get; private set; }
+        public string Proxy { get; private set; }
 
         public Product(string tmpdir, string address, List<string> extraParams, bool local, bool credentialsEnableService)
         {
@@ -128,6 +129,7 @@ namespace CSharpWebDriverExample
 
         public void ChangeProxy(string proxy)
         {
+            Proxy = proxy;
             string schema = string.Empty;
             string host = string.Empty;
             string port = string.Empty;
@@ -195,6 +197,7 @@ namespace CSharpWebDriverExample
                 ChangeTimeZone(timeZoneInfo);
             }
         }
+
         private TimeZoneInfo GetTimeZone()
         {
             string url = "https://time.gologin.com";
@@ -286,6 +289,24 @@ namespace CSharpWebDriverExample
                 {
                     return port;
                 }
+            }
+        }
+
+        private string FormatProxyUrlPassword(string proxy)
+        {
+            if (string.IsNullOrEmpty(proxy))
+            {
+                return string.Empty;
+            }
+
+            string[] proxyParts = proxy.Split(new string[] { "://" }, StringSplitOptions.None);
+            if (proxyParts.Length == 2)
+            {
+                return proxyParts[0] + "://" + proxyParts[1];
+            }
+            else
+            {
+                return proxyParts[0] + "://" + proxyParts[2] + ":" + proxyParts[3] + "@" + proxyParts[1];
             }
         }
     }
