@@ -1,21 +1,24 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
+using System.Net;
 using System.Net.Http;
 using System.Net.Sockets;
 using System.Threading.Tasks;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using OpenQA.Selenium;
 using OpenQA.Selenium.Chrome;
-using OpenQA.Selenium.Support.UI;
+using OpenQA.Selenium.Remote;
 
-namespace CSharpWebDriverExample
+namespace Main
 {
     class Program
     {
         static async Task Main(string[] args)
         {
-            string tmpdir = Path.GetTempPath(); // Thay đổi thư mục chứa profiles
+            string tmpdir = @"E:\\noproxy"; // Thay đổi thư mục chứa profiles
             string address = "127.0.0.1";
             List<string> extraParams = new List<string>
             {
@@ -26,18 +29,14 @@ namespace CSharpWebDriverExample
 
             Product starts = new Product(tmpdir, address, extraParams, local, credentialsEnableService);
             string proxyData = null;
-            List<string> proxyDataList = new List<string> { "http://192.168.1.111:7101", "http://192.168.1.111:7102" }; // Thay đổi proxy tại đây
-            // List<string> proxyDataList = new List<string>(); // Bỏ comment dòng này nếu bạn không có dữ liệu proxy
+            List<string> proxyDataList = new List<string>(); // Bỏ comment dòng này nếu bạn không có dữ liệu proxy
 
             if (proxyDataList.Count > 0)
             {
-                foreach (var proxyNew in proxyDataList)
-                {
-                    proxyData = proxyNew;
-                }
+                proxyData = proxyDataList[0]; // Chọn proxy đầu tiên nếu có
             }
 
-            string profileId = "98998097614797189124"; // Thay đổi tên Profile ở đây
+            string profileId = "00167110699377194117"; // Thay đổi tên Profile ở đây
             starts.SetProfileId(profileId);
 
             if (!string.IsNullOrEmpty(proxyData))
@@ -50,66 +49,18 @@ namespace CSharpWebDriverExample
             Console.WriteLine("Proxy start: " + proxyData);
             string debuggerAddress = starts.Start();
             Console.WriteLine(debuggerAddress);
+            // Đặt đường dẫn của ChromeDriver tùy chỉnh
+            string chromeDriverPath = @"C:\Users\s0ckd\OneDrive\Desktop\gologin-demo\chromedriver-win32\chromedriver.exe";
 
-            string chromeDriverDirectory = @"Đường_dẫn_đến_thư_mục_chứa_ChromeDriver";
-            string chromeDriverPath = Path.Combine(chromeDriverDirectory, "chromedriver.exe");
-
-            // Kiểm tra xem tệp ChromeDriver.exe có tồn tại trong thư mục đã chỉ định không
-            if (!File.Exists(chromeDriverPath))
-            {
-                Console.WriteLine("Không tìm thấy ChromeDriver.exe trong thư mục đã chỉ định.");
-                return;
-            }
-            
-            ChromeDriverService chromeDriverService = ChromeDriverService.CreateDefaultService();
-            chromeDriverService.HideCommandPromptWindow = true;
-
+            // Tạo ChromeOptions và đặt giá trị debuggerAddress
             ChromeOptions chromeOptions = new ChromeOptions();
-            chromeOptions.AddArgument($"--remote-debugging-port={debuggerAddress}");
-            chromeOptions.AddArgument("--user-data-dir=" + starts.ProfilePath);
-            chromeOptions.AddArgument("--password-store=basic");
-            chromeOptions.AddArgument("--lang=en");
+            chromeOptions.DebuggerAddress = debuggerAddress;
 
-            if (!string.IsNullOrEmpty(proxyData))
-            {
-                string[] proxyParts = proxyData.Split(new string[] { "://" }, StringSplitOptions.None);
-                if (proxyParts.Length == 2)
-                {
-                    string schema = proxyParts[0];
-                    string[] proxyHostPort = proxyParts[1].Split(':');
-                    if (proxyHostPort.Length == 2)
-                    {
-                        string proxyHost = proxyHostPort[0];
-                        string proxyPort = proxyHostPort[1];
+            // Khởi tạo ChromeDriver với ChromeOptions
+            IWebDriver driver = new ChromeDriver(chromeDriverPath, chromeOptions);
 
-                        string hrRules = $"\"MAP * 0.0.0.0 , EXCLUDE {proxyHost}\"";
-                        chromeOptions.AddArgument($"--proxy-server={proxyData}");
-                        chromeOptions.AddArgument("--host-resolver-rules=" + hrRules);
-                    }
-                }
-            }
+            driver.Navigate().GoToUrl("https://accounts.google.com/ServiceLogin?hl=vi");
 
-            foreach (var param in starts.ExtraParams)
-            {
-                chromeOptions.AddArgument(param);
-            }
-
-            using (IWebDriver driver = new ChromeDriver(chromeDriverService, chromeOptions))
-            {
-                driver.Navigate().GoToUrl("https://accounts.google.com/ServiceLogin?hl=vi");
-
-                WebDriverWait wait = new WebDriverWait(driver, TimeSpan.FromSeconds(10));
-                IWebElement loginBox = wait.Until(SeleniumExtras.WaitHelpers.ExpectedConditions.ElementIsVisible(By.Id("identifierId")));
-                loginBox.SendKeys("huongthuy70483");
-                loginBox.SendKeys(Keys.Enter);
-
-                IWebElement passWordBox = wait.Until(SeleniumExtras.WaitHelpers.ExpectedConditions.ElementIsVisible(By.Name("Passwd")));
-                passWordBox.SendKeys("passsss");
-                passWordBox.SendKeys(Keys.Enter);
-
-                Console.WriteLine("Press any key to exit...");
-                Console.ReadKey();
-            }
         }
     }
 
@@ -122,6 +73,7 @@ namespace CSharpWebDriverExample
         public bool CredentialsEnableService { get; private set; }
         public string ProfilePath { get; private set; }
         public string ExecutablePath { get; private set; }
+        public string Proxy { get; private set; }
 
         public Product(string tmpdir, string address, List<string> extraParams, bool local, bool credentialsEnableService)
         {
@@ -130,7 +82,7 @@ namespace CSharpWebDriverExample
             ExtraParams = extraParams;
             Local = local;
             CredentialsEnableService = credentialsEnableService;
-            ExecutablePath = "đường_dẫn_đến_tệp_chrome.exe"; // Thay đổi đường dẫn tới Chrome Browser ở đây
+            ExecutablePath = "C:\\gologin\\browser\\orbita-browser\\chrome.exe"; // Thay đổi đường dẫn tới Chrome Browser ở đây
         }
 
         public void SetProfileId(string profileId)
@@ -140,17 +92,16 @@ namespace CSharpWebDriverExample
 
         public void ChangeProxy(string proxy)
         {
-            Proxy = proxy;
-            string schema = string.Empty;
-            string host = string.Empty;
-            string port = string.Empty;
-            string username = string.Empty;
-            string password = string.Empty;
-
             if (!string.IsNullOrEmpty(proxy))
             {
                 try
                 {
+                    string schema = string.Empty;
+                    string host = string.Empty;
+                    string port = string.Empty;
+                    string username = string.Empty;
+                    string password = string.Empty;
+
                     schema = proxy.Split("://")[0];
                     string[] proxyParts = proxy.Split("://")[1].Split(':');
                     if (proxyParts.Length == 2)
@@ -171,24 +122,24 @@ namespace CSharpWebDriverExample
                     if (File.Exists(preferencesPath))
                     {
                         string preferencesContent = File.ReadAllText(preferencesPath);
-                        dynamic preferences = JsonConvert.DeserializeObject(preferencesContent);
+                        JObject preferences = JObject.Parse(preferencesContent);
 
                         if (preferences != null)
                         {
-                            preferences.gologin.proxy = new
-                            {
-                                id = null,
-                                mode = schema,
-                                host = host,
-                                port = int.Parse(port),
-                                username = username,
-                                password = password,
-                                changeIpUrl = "null",
-                                autoProxyRegion = "us",
-                                torProxyRegion = "us"
-                            };
+                            JObject proxyObject = new JObject();
+                            proxyObject["id"] = null;
+                            proxyObject["mode"] = schema;
+                            proxyObject["host"] = host;
+                            proxyObject["port"] = int.Parse(port);
+                            proxyObject["username"] = username;
+                            proxyObject["password"] = password;
+                            proxyObject["changeIpUrl"] = "null";
+                            proxyObject["autoProxyRegion"] = "us";
+                            proxyObject["torProxyRegion"] = "us";
 
-                            File.WriteAllText(preferencesPath, JsonConvert.SerializeObject(preferences));
+                            preferences["gologin"]["proxy"] = proxyObject;
+
+                            File.WriteAllText(preferencesPath, preferences.ToString());
                         }
                     }
                 }
@@ -214,13 +165,7 @@ namespace CSharpWebDriverExample
             string url = "https://time.gologin.com";
             string proxyUrl = FormatProxyUrlPassword(Proxy);
 
-            HttpClient httpClient = new HttpClient();
-
-            if (!string.IsNullOrEmpty(proxyUrl))
-            {
-                httpClient.DefaultRequestHeaders.Add("User-Agent", "gologin-api");
-                httpClient.DefaultProxy = new WebProxy(proxyUrl);
-            }
+            HttpClient httpClient = GetHttpClient(proxyUrl);
 
             try
             {
@@ -241,37 +186,67 @@ namespace CSharpWebDriverExample
             return null;
         }
 
-        private void ChangeTimeZone(TimeZoneInfo timeZoneInfo)
+        public string StartChrome()
         {
-            string preferencesPath = Path.Combine(ProfilePath, "Default", "Preferences");
+            // Khởi động Chrome với debug port
+            string chromeExecutablePath = ExecutablePath;
+            int ports = GetRandomPort();
+            string chromeCommandLine = $"--remote-debugging-port={ports} " +
+                $"--user-data-dir={ProfilePath} --password-store=basic --lang=en";
 
-            if (File.Exists(preferencesPath))
+            if (!string.IsNullOrEmpty(Proxy))
             {
-                string preferencesContent = File.ReadAllText(preferencesPath);
-                dynamic preferences = JsonConvert.DeserializeObject(preferencesContent);
-
-                if (preferences != null)
+                string[] proxyParts = Proxy.Split(new string[] { "://" }, StringSplitOptions.None);
+                if (proxyParts.Length == 2)
                 {
-                    preferences.gologin.timezone.id = timeZoneInfo.Id;
+                    string schema = proxyParts[0];
+                    string[] proxyHostPort = proxyParts[1].Split(':');
+                    if (proxyHostPort.Length == 2)
+                    {
+                        string proxyHost = proxyHostPort[0];
+                        string proxyPort = proxyHostPort[1];
 
-                    File.WriteAllText(preferencesPath, JsonConvert.SerializeObject(preferences));
+                        string hrRules = $"\"MAP * 0.0.0.0 , EXCLUDE {proxyHost}\"";
+                        chromeCommandLine += $" --proxy-server={Proxy} --host-resolver-rules={hrRules}";
+                    }
                 }
             }
+
+            foreach (var param in ExtraParams)
+            {
+                chromeCommandLine += $" {param}";
+            }
+
+            ProcessStartInfo startInfo = new ProcessStartInfo
+            {
+                FileName = chromeExecutablePath,
+                Arguments = chromeCommandLine,
+                CreateNoWindow = true,
+                UseShellExecute = false
+            };
+
+            Process.Start(startInfo);
+
+            // Chờ một thời gian ngắn để Chrome khởi động
+            Task.Delay(5000).Wait(); // 5 seconds, bạn có thể điều chỉnh thời gian chờ tùy ý
+
+            return $"{Address}:{ports}";
         }
+
 
         public string Start()
         {
+            string url = StartChrome();
             int tryCount = 1;
-            string url = $"{Address}:{GetRandomPort()}";
-
+ 
             while (tryCount < 100)
             {
                 try
                 {
-                    using (HttpClient httpClient = new HttpClient())
+                    using (HttpClient httpClient = GetHttpClient(null))
                     {
                         var data = httpClient.GetStringAsync($"http://{url}/json").Result;
-                        Console.WriteLine(data);
+                        //Console.WriteLine(data);
                         break;
                     }
                 }
@@ -285,7 +260,7 @@ namespace CSharpWebDriverExample
             return url;
         }
 
-        private int GetRandomPort()
+        public int GetRandomPort()
         {
             Random random = new Random();
             int port = random.Next(1000, 35000);
@@ -318,6 +293,44 @@ namespace CSharpWebDriverExample
             else
             {
                 return proxyParts[0] + "://" + proxyParts[2] + ":" + proxyParts[3] + "@" + proxyParts[1];
+            }
+        }
+
+        public HttpClient GetHttpClient(string proxyUrl)
+        {
+            HttpClientHandler httpClientHandler = new HttpClientHandler();
+
+            if (!string.IsNullOrEmpty(proxyUrl))
+            {
+                WebProxy webProxy = new WebProxy(proxyUrl);
+                httpClientHandler.Proxy = webProxy;
+            }
+
+            HttpClient httpClient = new HttpClient(httpClientHandler);
+
+            if (!string.IsNullOrEmpty(proxyUrl))
+            {
+                httpClient.DefaultRequestHeaders.Add("User-Agent", "gologin-api");
+            }
+
+            return httpClient;
+        }
+
+        private void ChangeTimeZone(TimeZoneInfo timeZoneInfo)
+        {
+            string preferencesPath = Path.Combine(ProfilePath, "Default", "Preferences");
+
+            if (File.Exists(preferencesPath))
+            {
+                string preferencesContent = File.ReadAllText(preferencesPath);
+                dynamic preferences = JsonConvert.DeserializeObject(preferencesContent);
+
+                if (preferences != null)
+                {
+                    preferences.gologin.timezone.id = timeZoneInfo.Id;
+
+                    File.WriteAllText(preferencesPath, JsonConvert.SerializeObject(preferences));
+                }
             }
         }
     }
