@@ -50,7 +50,15 @@ namespace CSharpWebDriverExample
             Console.WriteLine("Proxy start: " + proxyData);
             string debuggerAddress = starts.Start();
             Console.WriteLine(debuggerAddress);
-
+            string chromeDriverDirectory = @"Đường_dẫn_đến_thư_mục_chứa_ChromeDriver";
+            string chromeDriverPath = Path.Combine(chromeDriverDirectory, "chromedriver.exe");
+            
+            // Kiểm tra xem tệp ChromeDriver.exe có tồn tại trong thư mục đã chỉ định không
+            if (!File.Exists(chromeDriverPath))
+            {
+                Console.WriteLine("Không tìm thấy ChromeDriver.exe trong thư mục đã chỉ định.");
+                return;
+            }
             ChromeDriverService chromeDriverService = ChromeDriverService.CreateDefaultService();
             chromeDriverService.HideCommandPromptWindow = true;
 
