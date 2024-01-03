@@ -1,268 +1,292 @@
-public class SeChrome
+using System;
+using System.Collections.Generic;
+using System.Diagnostics;
+using System.IO;
+using System.Net.Http;
+using System.Net.Http.Headers;
+using System.Threading.Tasks;
+using OpenQA.Selenium;
+using OpenQA.Selenium.Chrome;
+using OpenQA.Selenium.Support.UI;
+
+namespace CSharpWebDriverExample
+{
+    class Program
     {
-        Random rnd = new Random();
-        GoLoginOffline go = new GoLoginOffline();
-        private bool keepUserDataDir;
-        private string userDataDir;
-
-        public ChromeDriver Create(
-            string browserExecutablePath = null,
-            string userDataDir = null,
-            ChromeOptions options = null,
-            string driverExecutablePath = null,
-            bool headless = false,
-            bool hideCommandPromptWindow = false)
+        static async Task Main(string[] args)
         {
-            try
+            string tmpdir = Path.GetTempPath();
+            string address = "127.0.0.1";
+            List<string> extraParams = new List<string>
             {
-                if (string.IsNullOrEmpty(browserExecutablePath))
+                "--disable-site-isolation-trials"
+            };
+            bool local = false;
+            bool credentialsEnableService = false;
+
+            Product starts = new Product(tmpdir, address, extraParams, local, credentialsEnableService);
+            string proxyData = null;
+            List<string> proxyDataList = new List<string> { "http://192.168.1.111:7101", "http://192.168.1.111:7102" };
+            // List<string> proxyDataList = new List<string>(); // Uncomment this line if you don't have proxy data
+
+            if (proxyDataList.Count > 0)
+            {
+                foreach (var proxyNew in proxyDataList)
                 {
-                    browserExecutablePath = AppDomain.CurrentDomain.BaseDirectory + @"browser\browser\chrome.exe";
+                    proxyData = proxyNew;
                 }
-                //----- Patcher ChromeDriver -----
-                if (string.IsNullOrEmpty(driverExecutablePath))
+            }
+
+            string profileId = "98998097614797189124";
+            starts.SetProfileId(profileId);
+
+            if (!string.IsNullOrEmpty(proxyData))
+            {
+                starts.ChangeProxy(proxyData);
+                starts.Update(profileId);
+            }
+
+            Console.WriteLine("Profile start: " + profileId);
+            Console.WriteLine("Proxy start: " + proxyData);
+            string debuggerAddress = starts.Start();
+            Console.WriteLine(debuggerAddress);
+
+            ChromeDriverService chromeDriverService = ChromeDriverService.CreateDefaultService();
+            chromeDriverService.HideCommandPromptWindow = true;
+
+            ChromeOptions chromeOptions = new ChromeOptions();
+            chromeOptions.AddArgument($"--remote-debugging-port={debuggerAddress}");
+            chromeOptions.AddArgument("--user-data-dir=" + starts.ProfilePath);
+            chromeOptions.AddArgument("--password-store=basic");
+            chromeOptions.AddArgument("--lang=en");
+
+            if (!string.IsNullOrEmpty(proxyData))
+            {
+                string[] proxyParts = proxyData.Split(new string[] { "://" }, StringSplitOptions.None);
+                if (proxyParts.Length == 2)
                 {
-                    driverExecutablePath = AppDomain.CurrentDomain.BaseDirectory + "chromedriver.exe";
-                }
-                Patcher patcher = new Patcher(driverExecutablePath);
-                patcher.Auto();
-                //----- Patcher ChromeDriver -----
-
-                //----- Options -----
-                if (options == null) options = new ChromeOptions();
-                options.AddArgument($"--disable-encryption");
-                options.AddArgument($"--font-masking-mode=2");
-                options.AddArgument($"--lang=en-US");
-                options.AddArgument($"--host-resolver-rules=\"EXCLUDE tmproxy.com\"");
-                string extensionDir = AppDomain.CurrentDomain.BaseDirectory + @"browser\extensions\";
-                options.AddArgument($"--load-extension=\"" + extensionDir + "cookies-ext," + extensionDir + "passwords-ext," + extensionDir + "tm-proxy\"");
-                //----- Options -----
-
-                //----- DebugPort -----
-                Contact for source code
-                //----- DebugPort -----
-
-                //----- UserDataDir -----
-                this.keepUserDataDir = true;
-                var userDataDirArg = options.Arguments
-                    .Select(it => Regex.Match(it,
-                        @"(?:--)?user-data-dir(?:[ =])?(.*)"))
-                    .Select(it => it.Groups[1].Value)
-                    .FirstOrDefault(it => !string.IsNullOrEmpty(it));
-                if (userDataDirArg != null)
-                    userDataDir = userDataDirArg;
-                else
-                {
-                    if (userDataDir == null)
+                    string schema = proxyParts[0];
+                    string[] proxyHostPort = proxyParts[1].Split(':');
+                    if (proxyHostPort.Length == 2)
                     {
-                        this.keepUserDataDir = false;
-                        userDataDir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString());
-                        go.CreateProfileFromLocal(userDataDir, "Guest-" + rnd.Next(1000, 10000));
+                        string proxyHost = proxyHostPort[0];
+                        string proxyPort = proxyHostPort[1];
+
+                        string hrRules = $"\"MAP * 0.0.0.0 , EXCLUDE {proxyHost}\"";
+                        chromeOptions.AddArgument($"--proxy-server={proxyData}");
+                        chromeOptions.AddArgument("--host-resolver-rules=" + hrRules);
                     }
-                    options.AddArgument($"--user-data-dir={userDataDir}");
                 }
-                this.userDataDir = userDataDir;
-                //----- UserDataDir -----
+            }
 
+            foreach (var param in starts.ExtraParams)
+            {
+                chromeOptions.AddArgument(param);
+            }
 
-                //----- BinaryLocation -----
-                options.BinaryLocation = browserExecutablePath;
-                //----- BinaryLocation -----
+            using (IWebDriver driver = new ChromeDriver(chromeDriverService, chromeOptions))
+            {
+                driver.Navigate().GoToUrl("https://accounts.google.com/ServiceLogin?hl=vi");
 
-                //----- Headless -----
-                if (headless)
-                {
-                    options.AddArguments("--headless");
-                    options.AddArguments("--window-size=1920,1080");
-                    options.AddArguments("--start-maximized");
-                    options.AddArguments("--no-sandbox");
-                }
-                //----- Headless -----
+                WebDriverWait wait = new WebDriverWait(driver, TimeSpan.FromSeconds(10));
+                IWebElement loginBox = wait.Until(SeleniumExtras.WaitHelpers.ExpectedConditions.ElementIsVisible(By.Id("identifierId")));
+                loginBox.SendKeys("huongthuy70483");
+                loginBox.SendKeys(Keys.Enter);
 
-                //----- Fix exit_type -----
+                IWebElement passWordBox = wait.Until(SeleniumExtras.WaitHelpers.ExpectedConditions.ElementIsVisible(By.Name("Passwd")));
+                passWordBox.SendKeys("passsss");
+                passWordBox.SendKeys(Keys.Enter);
+
+                Console.WriteLine("Press any key to exit...");
+                Console.ReadKey();
+            }
+        }
+    }
+
+    public class Product
+    {
+        public string Tmpdir { get; private set; }
+        public string Address { get; private set; }
+        public List<string> ExtraParams { get; private set; }
+        public bool Local { get; private set; }
+        public bool CredentialsEnableService { get; private set; }
+        public string ProfilePath { get; private set; }
+
+        public Product(string tmpdir, string address, List<string> extraParams, bool local, bool credentialsEnableService)
+        {
+            Tmpdir = tmpdir;
+            Address = address;
+            ExtraParams = extraParams;
+            Local = local;
+            CredentialsEnableService = credentialsEnableService;
+        }
+
+        public void SetProfileId(string profileId)
+        {
+            ProfilePath = Path.Combine(Tmpdir, profileId);
+        }
+
+        public void ChangeProxy(string proxy)
+        {
+            string schema = string.Empty;
+            string host = string.Empty;
+            string port = string.Empty;
+            string username = string.Empty;
+            string password = string.Empty;
+
+            if (!string.IsNullOrEmpty(proxy))
+            {
                 try
                 {
-                    var filePath = Path.Combine(userDataDir, @"Default/Preferences");
-                    var json = File.ReadAllText(filePath,
-                        Encoding.GetEncoding("ISO-8859-1"));
-                    var regex = new Regex(@"(?<=exit_type"":)(.*?)(?=,)");
-                    var exitType = regex.Match(json).Value;
-                    if (exitType != "" && exitType != "null")
+                    schema = proxy.Split("://")[0];
+                    string[] proxyParts = proxy.Split("://")[1].Split(':');
+                    if (proxyParts.Length == 2)
                     {
-                        json = regex.Replace(json, "null");
-                        File.WriteAllText(filePath, json,
-                            Encoding.GetEncoding("ISO-8859-1"));
+                        host = proxyParts[0];
+                        port = proxyParts[1];
+                    }
+                    else if (proxyParts.Length == 4)
+                    {
+                        host = proxyParts[0];
+                        port = proxyParts[1];
+                        username = proxyParts[2];
+                        password = proxyParts[3];
+                    }
+
+                    string preferencesPath = Path.Combine(ProfilePath, "Default", "Preferences");
+
+                    if (File.Exists(preferencesPath))
+                    {
+                        string preferencesContent = File.ReadAllText(preferencesPath);
+                        dynamic preferences = JsonConvert.DeserializeObject(preferencesContent);
+
+                        if (preferences != null)
+                        {
+                            preferences.gologin.proxy = new
+                            {
+                                id = null,
+                                mode = schema,
+                                host = host,
+                                port = int.Parse(port),
+                                username = username,
+                                password = password,
+                                changeIpUrl = "null",
+                                autoProxyRegion = "us",
+                                torProxyRegion = "us"
+                            };
+
+                            File.WriteAllText(preferencesPath, JsonConvert.SerializeObject(preferences));
+                        }
                     }
                 }
-                catch (Exception) { }
-                //----- Fix exit_type -----
-
-                //----- Start Process -----
-                var args = options.Arguments
-                    .Select(it => it.Trim())
-                    .Aggregate("", (r, it) => r + " " +
-                        (it.Contains(" ") ? $"\"{it}\"" : it));
-                var info = new ProcessStartInfo(options.BinaryLocation, args);
-                info.UseShellExecute = false;
-                info.RedirectStandardInput = true;
-                info.RedirectStandardOutput = true;
-                info.RedirectStandardError = true;
-                var browser = Process.Start(info);
-                browser.EnableRaisingEvents = true;
-                browser.Exited += ProcessEnded;
-                //----- Start Process -----
-
-                //----- Create ChromeDriver -----
-                var service = ChromeDriverService.CreateDefaultService(
-                    Path.GetDirectoryName(driverExecutablePath),
-                    Path.GetFileName(driverExecutablePath));
-                service.HideCommandPromptWindow = hideCommandPromptWindow;
-                ChromeDriver driver = new ChromeDriver(service, options);
-                //----- Create ChromeDriver -----
-
-
-                if (hasCdcProps(driver))
-                    hookRemoveCdcProps(driver);
-
-                return driver;
-            }
-            catch (Exception err)
-            {
-                File.WriteAllText(AppDomain.CurrentDomain.BaseDirectory + "logs.txt", err.ToString());
-                return null;
-            }
-        }
-
-        private void ProcessEnded(object sender, EventArgs e)
-        {
-            if (!this.keepUserDataDir)
-            {
-                for (var i = 0; i < 5; i++)
+                catch (Exception ex)
                 {
-                    try
-                    {
-                        Directory.Delete(this.userDataDir, true);
-                        break;
-                    }
-                    catch (Exception)
-                    {
-                        Thread.Sleep(100);
-                    }
+                    Console.WriteLine(ex);
                 }
             }
         }
 
-        private bool hasCdcProps(ChromeDriver driver)
+        public void Update(string profileId)
         {
-            var props = (ReadOnlyCollection<object>)driver.ExecuteScript(
-                @"
-                    let objectToInspect = window,
-                        result = [];
-                    while(objectToInspect !== null)
-                    { result = result.concat(Object.getOwnPropertyNames(objectToInspect));
-                      objectToInspect = Object.getPrototypeOf(objectToInspect); }
-                    return result.filter(i => i.match(/.+_.+_(Array|Promise|Symbol)/ig))
-                 ");
-            return props.Count > 0;
+            TimeZoneInfo timeZoneInfo = GetTimeZone();
+
+            if (timeZoneInfo != null)
+            {
+                ChangeTimeZone(timeZoneInfo);
+            }
         }
-
-        private void hookRemoveCdcProps(ChromeDriver driver)
+        private TimeZoneInfo GetTimeZone()
         {
-            driver.ExecuteCdpCommand(
-                "Page.addScriptToEvaluateOnNewDocument",
-                new Dictionary<string, object>
-                {
-                    ["source"] =
-                    @"
-                        let objectToInspect = window,
-                            result = [];
-                        while(objectToInspect !== null) 
-                        { result = result.concat(Object.getOwnPropertyNames(objectToInspect));
-                          objectToInspect = Object.getPrototypeOf(objectToInspect); }
-                        result.forEach(p => p.match(/.+_.+_(Array|Promise|Symbol)/ig)
-                                            &&delete window[p]&&console.log('removed',p))
-                     "
-                });
-        }
+            string url = "https://time.gologin.com";
+            string proxyUrl = FormatProxyUrlPassword(Proxy);
 
-       // socket EndPoint
-       Contact for source code
-       // socket EndPoint
+            HttpClient httpClient = new HttpClient();
 
-        public bool WaitLoadWeb(ChromeDriver driver, By by, int timeout = 60)
-        {
+            if (!string.IsNullOrEmpty(proxyUrl))
+            {
+                httpClient.DefaultRequestHeaders.Add("User-Agent", "gologin-api");
+                httpClient.DefaultProxy = new WebProxy(proxyUrl);
+            }
+
             try
             {
-                for (int i = 0; i < timeout; i++)
+                string response = httpClient.GetStringAsync(url).Result;
+                dynamic timeZoneData = JsonConvert.DeserializeObject(response);
+
+                if (timeZoneData != null)
                 {
-                    Thread.Sleep(1000);
-                    if (IsElement(driver, by))
+                    string timeZoneId = timeZoneData.timezone;
+                    return TimeZoneInfo.FindSystemTimeZoneById(timeZoneId);
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine(ex);
+            }
+
+            return null;
+        }
+
+        private void ChangeTimeZone(TimeZoneInfo timeZoneInfo)
+        {
+            string preferencesPath = Path.Combine(ProfilePath, "Default", "Preferences");
+
+            if (File.Exists(preferencesPath))
+            {
+                string preferencesContent = File.ReadAllText(preferencesPath);
+                dynamic preferences = JsonConvert.DeserializeObject(preferencesContent);
+
+                if (preferences != null)
+                {
+                    preferences.gologin.timezone.id = timeZoneInfo.Id;
+
+                    File.WriteAllText(preferencesPath, JsonConvert.SerializeObject(preferences));
+                }
+            }
+        }
+
+        public string Start()
+        {
+            int tryCount = 1;
+            string url = $"{Address}:{GetRandomPort()}";
+
+            while (tryCount < 100)
+            {
+                try
+                {
+                    using (HttpClient httpClient = new HttpClient())
                     {
-                        Thread.Sleep(200);
-                        return true;
+                        var data = httpClient.GetStringAsync($"http://{url}/json").Result;
+                        Console.WriteLine(data);
+                        break;
                     }
                 }
-                return false;
-            }
-            catch
-            {
-                return false;
-            }
-        }
-
-        public bool IsElement(ChromeDriver driver, By by)
-        {
-            try
-            {
-                driver.FindElement(by);
-                return true;
-            }
-            catch
-            {
-                return false;
-            }
-        }
-        
-
-    }
-
-    public class Patcher
-    {
-        private string _driverExecutablePath;
-        public Patcher(
-            string driverExecutablePath = null)
-        {
-            _driverExecutablePath = driverExecutablePath;
-        }
-
-        public void Auto()
-        {
-            if (!isBinaryPatched())
-                patchExe();
-        }
-
-        private bool isBinaryPatched()
-        {
-            if (_driverExecutablePath == null)
-                throw new Exception("driverExecutablePath is required.");
-
-            using (var fs = new FileStream(_driverExecutablePath,
-                FileMode.Open, FileAccess.Read))
-            using (var reader = new StreamReader(fs, Encoding.GetEncoding("ISO-8859-1")))
-            {
-                while (true)
+                catch
                 {
-                    var line = reader.ReadLine();
-                    if (line == null)
-                        break;
-                    if (line.Contains("cdc_"))
-                        return false;
+                    tryCount++;
+                    Task.Delay(1000).Wait();
                 }
-                return true;
             }
+
+            return url;
         }
 
-       // Bypass Selenium
-       Contact for source code
-       // Bypass Selenium
+        private int GetRandomPort()
+        {
+            Random random = new Random();
+            int port = random.Next(1000, 35000);
+            using (TcpClient tcpClient = new TcpClient())
+            {
+                try
+                {
+                    tcpClient.Connect(Address, port);
+                    return GetRandomPort();
+                }
+                catch
+                {
+                    return port;
+                }
+            }
+        }
     }
+}
