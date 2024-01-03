@@ -15,7 +15,7 @@ namespace CSharpWebDriverExample
     {
         static async Task Main(string[] args)
         {
-            string tmpdir = Path.GetTempPath(); // Đổi thư mục lưu trữ profile nếu cần
+            string tmpdir = Path.GetTempPath(); // Thay đổi thư mục chứa profiles
             string address = "127.0.0.1";
             List<string> extraParams = new List<string>
             {
@@ -26,8 +26,8 @@ namespace CSharpWebDriverExample
 
             Product starts = new Product(tmpdir, address, extraParams, local, credentialsEnableService);
             string proxyData = null;
-            List<string> proxyDataList = new List<string> { "http://192.168.1.111:7101", "http://192.168.1.111:7102" }; // Đổi proxy tại đây
-            // List<string> proxyDataList = new List<string>(); // Bỏ comment dòng này nếu không có dữ liệu proxy
+            List<string> proxyDataList = new List<string> { "http://192.168.1.111:7101", "http://192.168.1.111:7102" }; // Thay đổi proxy tại đây
+            // List<string> proxyDataList = new List<string>(); // Bỏ comment dòng này nếu bạn không có dữ liệu proxy
 
             if (proxyDataList.Count > 0)
             {
@@ -37,7 +37,7 @@ namespace CSharpWebDriverExample
                 }
             }
 
-            string profileId = "98998097614797189124"; // Đổi tên profile ở đây
+            string profileId = "98998097614797189124"; // Thay đổi tên Profile ở đây
             starts.SetProfileId(profileId);
 
             if (!string.IsNullOrEmpty(proxyData))
@@ -50,15 +50,17 @@ namespace CSharpWebDriverExample
             Console.WriteLine("Proxy start: " + proxyData);
             string debuggerAddress = starts.Start();
             Console.WriteLine(debuggerAddress);
+
             string chromeDriverDirectory = @"Đường_dẫn_đến_thư_mục_chứa_ChromeDriver";
             string chromeDriverPath = Path.Combine(chromeDriverDirectory, "chromedriver.exe");
-            
+
             // Kiểm tra xem tệp ChromeDriver.exe có tồn tại trong thư mục đã chỉ định không
             if (!File.Exists(chromeDriverPath))
             {
                 Console.WriteLine("Không tìm thấy ChromeDriver.exe trong thư mục đã chỉ định.");
                 return;
             }
+            
             ChromeDriverService chromeDriverService = ChromeDriverService.CreateDefaultService();
             chromeDriverService.HideCommandPromptWindow = true;
 
@@ -119,7 +121,7 @@ namespace CSharpWebDriverExample
         public bool Local { get; private set; }
         public bool CredentialsEnableService { get; private set; }
         public string ProfilePath { get; private set; }
-        public string Proxy { get; private set; }
+        public string ExecutablePath { get; private set; }
 
         public Product(string tmpdir, string address, List<string> extraParams, bool local, bool credentialsEnableService)
         {
@@ -128,6 +130,7 @@ namespace CSharpWebDriverExample
             ExtraParams = extraParams;
             Local = local;
             CredentialsEnableService = credentialsEnableService;
+            ExecutablePath = "đường_dẫn_đến_tệp_chrome.exe"; // Thay đổi đường dẫn tới Chrome Browser ở đây
         }
 
         public void SetProfileId(string profileId)
